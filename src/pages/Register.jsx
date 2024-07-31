@@ -12,7 +12,8 @@ function Register() {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    password: ''
+    password: '',
+    isAdmin: false
   })
   const { name, email, password } = formData
 
@@ -40,7 +41,7 @@ function Register() {
         displayName: name
       })
 
-      const formDataCopy = { ...formData, about: '', languages: '', startedAt: '', numberOfPerm: 0 }
+      const formDataCopy = { ...formData, about: '', languages: '', startedAt: '', numberOfPerm: 0, isAdmin: false }
       delete formDataCopy.password
       formDataCopy.timestamp = serverTimestamp()
 

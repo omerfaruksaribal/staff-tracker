@@ -36,7 +36,8 @@ function Profile() {
     const [permMessage, setPermMessage] = useState('')
     const [permissionRequests, setPermissionRequests] = useState([]);
     const [disabledDates, setDisabledDates] = useState([])
-    const { name, email, about, languages, image, startedAt, numberOfPerm, isAdmin } = formData;
+    const [isAdmin, setIsAdmin] = useState(false)
+    const { name, email, about, languages, image, startedAt, numberOfPerm } = formData;
 
     const fetchPermissionRequests = async () => {
         try {
@@ -82,40 +83,35 @@ function Profile() {
                 console.error('Error fetching user data:', error);
             }
         };
+        const fetchAuthAdminStatus = async () => {
+            try {
+                const authUserDoc = await getDoc(doc(db, 'users', auth.currentUser.uid))
+                if (authUserDoc.exists) {
+                    const authUserData = authUserDoc.data()
+                    setIsAdmin(authUserData.isAdmin || false)
+                }
+            } catch (error) {
+                toast.error('Failed to fetch admin status')
+                console.log('Error fetching admin status: ', error);
+            }
+        }
         fetchUserData();
-    }, [id, navigate]);
+        fetchAuthAdminStatus()
+    }, [id, navigate, auth.currentUser.uid]);
 
 
     useEffect(() => {
         if (isAdmin) {
-            fetchPermissionRequests(); // Ensure this function is defined as above
+            fetchPermissionRequests(); 
         }
-    }, [isAdmin]);    
+    }, [isAdmin]);
 
     useEffect(() => {
-        const fetchPermissionRequests = async () => {
-            try {
-                const q = query(collection(db, 'permissions'), where('status', '==', 'pending'));
-                const querySnapshot = await getDocs(q);
-                const requests = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    
-                // Fetch user names for each request
-                const users = await Promise.all(requests.map(async (request) => {
-                    const userDoc = await getDoc(doc(db, 'users', request.userID));
-                    return { ...request, userName: userDoc.data().name }; // Add userName to each request
-                }));
-    
-                setPermissionRequests(users);
-            } catch (error) {
-                console.error('Failed to fetch permission requests', error);
-            }
-        };
         const fetchHolidayData = async () => {
             try {
                 const response = await fetch(API_URL);
                 const data = await response.json();
 
-                // API'den gelen tatil verilerini işleyip tarihe dönüştürüyoruz
                 const dates = data.resmitatiller.map(holiday => new Date(holiday.tarih));
                 setDisabledDates(dates);
             } catch (error) {
@@ -136,7 +132,7 @@ function Profile() {
         return isWeekend(date) || disabledDates.some(disabledDate => 
             date.getFullYear() === disabledDate.getFullYear() &&
             date.getMonth() === disabledDate.getMonth() &&
-            date.getDate() === disabledDate.getDate() // Note the correction here
+            date.getDate() === disabledDate.getDate() 
         );
     };
 
@@ -289,39 +285,62 @@ function Profile() {
 
         return { years, months, days };
     };
+
+    const calculateBusinessDays = (startDate, endDate, disabledDates) => {
+        let count = 0;
+        let currentDate = new Date(startDate);
     
+        while (currentDate <= endDate) {
+            const dayOfWeek = currentDate.getDay();
+            const isDisabledDate = disabledDates.some(disabledDate =>
+                currentDate.getFullYear() === disabledDate.getFullYear() &&
+                currentDate.getMonth() === disabledDate.getMonth() &&
+                currentDate.getDate() === disabledDate.getDate()
+            );
+    
+            if (dayOfWeek !== 0 && dayOfWeek !== 6 && !isDisabledDate) { // 0: Sunday, 6: Saturday
+                count++;
+            }
+    
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+    
+        return count;
+    };
+        
     const takePermission = async (e) => {
         e.preventDefault();
-
+    
         if (numberOfPerm <= 0) {
             toast.error('You do not have any permission to take');
             return setIsTakingPermission(false);
         }
+    
         // Calculate permission days
         const start = new Date(permStartAt);
         const end = new Date(permEndAt);
-        const diffTime = Math.abs(end - start);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); // Difference in days
-
+        const diffDays = calculateBusinessDays(start, end, disabledDates);
+    
         if (diffDays > numberOfPerm) {
             toast.error('Permission days exceed available days');
             return setIsTakingPermission(false);
         }
+    
         try {
             await addDoc(collection(db, 'permissions'), {
                 userID: id,
-                permStartAt: new Date(permStartAt),
-                permEndAt: new Date(permEndAt),
+                permStartAt: start,
+                permEndAt: end,
                 permMessage,
                 status: 'pending',
                 timestamp: serverTimestamp(),
             });
+    
             toast.success('Permission requested successfully');
-            // Refetch permission requests after adding a new one
-            fetchPermissionRequests(); // Ensure this function is defined and refetches the data
-
-            setPermMessage('')
-            setIsTakingPermission(false)
+            fetchPermissionRequests();
+    
+            setPermMessage('');
+            setIsTakingPermission(false);
         } catch (error) {
             toast.error('Failed to request permission');
             setIsTakingPermission(false);
@@ -335,38 +354,37 @@ function Profile() {
             await updateDoc(doc(db, 'permissions', requestId), { status });
     
             if (isApproved) {
-                // If approved, update user permissions
+                // Eğer onaylanmışsa, kullanıcı izinlerini güncelle
                 const requestDoc = await getDoc(doc(db, 'permissions', requestId));
                 const { permStartAt, permEndAt } = requestDoc.data();
-                const daysRequested = Math.ceil(Math.abs(permEndAt.toDate() - permStartAt.toDate()) / (1000 * 60 * 60 * 24));
+                const daysRequested = calculateBusinessDays(permStartAt.toDate(), permEndAt.toDate(), disabledDates);
     
-                // Find the user and update their permissions
+                // Kullanıcıyı bul ve izinlerini güncelle
                 const userDoc = await getDoc(doc(db, 'users', requestDoc.data().userID));
                 const currentPerm = userDoc.data().numberOfPerm;
     
-                // Ensure you only deduct the number of permissions when the request is approved
-                if (query(collection(db, 'permissions'), where('status', '==', 'approved'))) {
-                    await updateDoc(doc(db, 'users', requestDoc.data().userID), { numberOfPerm: currentPerm - daysRequested });
-                }
+                // İzin günlerini güncelle
+                await updateDoc(doc(db, 'users', requestDoc.data().userID), { numberOfPerm: currentPerm - daysRequested });
             }
-            // Refetch permission requests after updating the status
+    
+            // İzin taleplerini yeniden fetch et
             const q = query(collection(db, 'permissions'), where('status', '==', 'pending'));
             const querySnapshot = await getDocs(q);
             const requests = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-            // Fetch user names for each request
+    
+            // Her talep için kullanıcı adlarını fetch et
             const users = await Promise.all(requests.map(async (request) => {
                 const userDoc = await getDoc(doc(db, 'users', request.userID));
-                return { ...request, userName: userDoc.data().name }; // Add userName to each request
+                return { ...request, userName: userDoc.data().name }; // Her talep için userName ekle
             }));
-
+    
             setPermissionRequests(users);
     
             toast.success(`Permission request ${status}`);
         } catch (error) {
             toast.error('Failed to handle permission request');
         }
-    };    
+    };
     
     
     return (
@@ -426,7 +444,7 @@ function Profile() {
                         <p className="p-2 border border-gray-300 rounded">{formatDate(new Date(startedAt))}</p>
                     )}
                 </div>
-                {auth.currentUser.uid === id || isAdmin && (
+                {((auth.currentUser.uid === id) || isAdmin) && (
                     <div className="flex flex-col mb-4">
                         <label htmlFor="numberOfPerm" className="mb-2">Available Permissions:</label>
                         <p className="p-2 border border-gray-300 rounded">{numberOfPerm}</p>
@@ -459,6 +477,7 @@ function Profile() {
                                     <p><strong>{request.userName}</strong> is requesting permission from {formatDate(request.permStartAt.toDate())} to {formatDate(request.permEndAt.toDate())}</p>
                                     <p><strong>Permission Message: </strong>{request.permMessage}</p>
                                     <p><strong>Status:</strong> {request.status}</p>
+                                    <p><strong>Available Permissions of </strong>{request.userName}: {numberOfPerm}</p>
                                     <div className="flex space-x-4 mt-2">
                                         <button onClick={() => handlePermissionRequest(request.id, true)} className="bg-green-500 text-white p-2 rounded">Approve</button>
                                         <button onClick={() => handlePermissionRequest(request.id, false)} className="bg-red-500 text-white p-2 rounded">Reject</button>
