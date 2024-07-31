@@ -426,7 +426,7 @@ function Profile() {
                         <p className="p-2 border border-gray-300 rounded">{formatDate(new Date(startedAt))}</p>
                     )}
                 </div>
-                {isAdmin && (
+                {auth.currentUser.uid === id && (
                     <div className="flex flex-col mb-4">
                         <label htmlFor="numberOfPerm" className="mb-2">Available Permissions:</label>
                         <p className="p-2 border border-gray-300 rounded">{numberOfPerm}</p>
