@@ -68,7 +68,7 @@ function Header() {
 
   const onLogOut = () => {
     auth.signOut();
-    navigate('/login:');
+    navigate('/login');
   };
 
   return (
