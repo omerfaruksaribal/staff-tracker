@@ -4,7 +4,8 @@ import '../index.css';
 import { Disclosure, DisclosureButton, DisclosurePanel, Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import { Bars3Icon, BellIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { getStorage, ref, getDownloadURL } from 'firebase/storage';
+import { getDoc, doc } from 'firebase/firestore';
+import { db } from '../firebase.config';
 
 function Header() {
   const auth = getAuth();
@@ -12,6 +13,7 @@ function Header() {
     name: '',
     email: '',
     image: '', // URL of the image in Firebase Storage
+    isAdmin: false
   });
   
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -22,24 +24,34 @@ function Header() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        const storage = getStorage();
-        const userImageRef = ref(storage, `images/${user.uid}`);
-        
-        let imageUrl = defaultImageUrl;
         try {
-          // Try to get the download URL of the user's profile image
-          imageUrl = await getDownloadURL(userImageRef);
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            setFormData({
+              name: userData.name || 'User',
+              email: userData.email,
+              image: userData.image || defaultImageUrl,
+            });
+            setIsLoggedIn(true);
+          } else {
+            console.log('No user data found, using default values.');
+            setFormData({
+              name: user.displayName || 'User',
+              email: user.email,
+              image: defaultImageUrl,
+            });
+            setIsLoggedIn(true);
+          }
         } catch (error) {
-          // Use default image if the user does not have a profile image
-          console.log('Profile image not found, using default image.');
+          console.log('Error fetching user data:', error);
+          setFormData({
+            name: user.displayName || 'User',
+            email: user.email,
+            image: defaultImageUrl,
+          });
+          setIsLoggedIn(true);
         }
-
-        setFormData({
-          name: user.displayName || 'User',
-          email: user.email,
-          image: imageUrl,
-        });
-        setIsLoggedIn(true);
       } else {
         setFormData({
           name: '',
@@ -56,7 +68,7 @@ function Header() {
 
   const onLogOut = () => {
     auth.signOut();
-    navigate('/login');
+    navigate('/login:');
   };
 
   return (
@@ -115,7 +127,7 @@ function Header() {
                     >
                       <MenuItem>
                         <button
-                          onClick={() => navigate('/profile')}
+                          onClick={() => navigate(`/profile/${auth.currentUser.uid}`)}
                           className="block px-4 py-2 text-sm text-gray-700 data-[focus]:bg-gray-100"
                         >
                           Your Profile
@@ -188,7 +200,7 @@ function Header() {
               <div className="mt-3 space-y-1 px-2">
                 <DisclosureButton
                   as="a"
-                  onClick={() => navigate('/profile')}
+                  onClick={() => navigate(`/profile/${auth.currentUser.uid}`)}
                   className="block rounded-md px-3 py-2 text-base font-medium text-gray-400 hover:bg-gray-700 hover:text-white"
                 >
                   Your Profile

@@ -1,47 +1,42 @@
-import React from 'react'
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Link } from 'react-router-dom'
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth'
-import { toast } from 'react-toastify'
-import 'react-toastify/dist/ReactToastify.css';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
+import { toast } from 'react-toastify';
 
 function Login() {
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
-  })
-  const { email, password } = formData
+    const [formData, setFormData] = useState({
+        email: '',
+        password: ''
+    });
+    const { email, password } = formData;
 
-  const navigate = useNavigate()
+    const navigate = useNavigate();
 
-  const onChange = (e) => {
-    e.preventDefault()
-    setFormData((prevState) => ({
-      ...prevState,
-      [e.target.id]: e.target.value
-    }))
-  }
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+    const onChange = (e) => {
+        e.preventDefault();
+        setFormData((prevState) => ({
+            ...prevState,
+            [e.target.id]: e.target.value
+        }));
+    };
 
-    try {
-      const auth = getAuth()
-  
-      const userCredential = await signInWithEmailAndPassword(auth, email, password)
-  
-      const user = userCredential.user
-  
-      if (user) {
-        toast.success('Succesfully Logged In.')
-        navigate('/profile')
-      }
-    } catch (error) {
-      toast.error(error.message)
-    }
-    
+    const handleSubmit = async (e) => {
+        e.preventDefault();
 
-  }
+        try {
+            const auth = getAuth();
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
+
+            if (user) {
+                toast.success('Successfully Logged In.');
+                navigate(`/profile/${user.uid}`);
+            }
+        } catch (error) {
+            toast.error(error.message);
+        }
+    };
 
   return (
     <>

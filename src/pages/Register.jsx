@@ -40,7 +40,7 @@ function Register() {
         displayName: name
       })
 
-      const formDataCopy = { ...formData, about: '', languages: '' }
+      const formDataCopy = { ...formData, about: '', languages: '', startedAt: '', numberOfPerm: 0 }
       delete formDataCopy.password
       formDataCopy.timestamp = serverTimestamp()
 
